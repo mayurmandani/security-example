@@ -7,7 +7,6 @@ const helmet = require('helmet');
 const passport = require('passport');
 const { Strategy } = require('passport-google-oauth20');
 const cookieSession = require('cookie-session');
-const { verify } = require('crypto');
 
 require('dotenv').config();
 
@@ -33,19 +32,31 @@ function verifyCallback(accessToken, refreshToken, profile, done) {
 
 passport.use(new Strategy(AUTH_OPTIONS, verifyCallback));
 
+// Save the session to cookie
+passport.serializeUser((user, done) => {
+    done(null, user.id);
+});
+
+// Read the session from the cookie
+passport.deserializeUser((id, done) => {
+   done(null, id);
+});
+
 const app = express();
 
 app.use(helmet());
 app.use(cookieSession({
     name: 'session',
     maxAge: 24 * 60 * 60 * 1000,
-    keys: [ config.COOKIE_KEY_2, config.COOKIE_KEY_2 ]  
-}))
+    keys: [ config.COOKIE_KEY_1, config.COOKIE_KEY_2 ]  
+}));
 
 app.use(passport.initialize());
+app.use(passport.session());
 
 function checkLoggedIn(req, res, next) {
-  const isLoggedIn = true; // TODO
+  console.log('Current use is:', req.user);
+  const isLoggedIn = req.isAuthenticated() && req.user; 
   if(!isLoggedIn) {
     return res.status(401).json({
       error: 'You must log in!',
@@ -63,14 +74,17 @@ app.get('/auth/google/callback',
   passport.authenticate('google', {
   failureRedirect: '/failure',
   successRedirect: '/',
-  session: false,
+  session: true,
 }), 
 (req, res) => {
       console.log('Google called us back!');
     }
 );
 
-app.get('/auth/logout', (req, res) => {});
+app.get('/auth/logout', (req, res) => {
+    req.logout(); //Removes req.user and clears any logged in session
+    return res.redirect('/');
+});
 
 app.get('/secret', checkLoggedIn, (req, res) => {
   return res.send('Your personal secret value is 42!');
